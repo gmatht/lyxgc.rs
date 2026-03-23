@@ -6,12 +6,12 @@ Grammar checker for LyX/LaTeX. Drop-in replacement for ChkTeX with internal rule
 
 **Linux / macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gmatht/lyxgc.rs/master/quickstart.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gmatht/lyxgc.rs/v0.1.6/quickstart.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/gmatht/lyxgc.rs/master/quickstart.ps1 | iex
+irm https://raw.githubusercontent.com/gmatht/lyxgc.rs/v0.1.6/quickstart.ps1 | iex
 ```
 
 These fetch the latest release binary and run it on a sample file. No Rust toolchain required.
