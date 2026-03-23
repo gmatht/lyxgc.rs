@@ -14,7 +14,7 @@ try {
     exit 1
 }
 $tag = $release.tag_name
-$asset = $release.assets | Where-Object { $_.name -match "windows.*x64.*\.zip" } | Select-Object -First 1
+$asset = $release.assets | Where-Object { $_.name -match "windows.*(x64|x86_64).*\.zip" } | Select-Object -First 1
 if (-not $asset) {
     Write-Host "No Windows binary in release $tag"
     exit 1
