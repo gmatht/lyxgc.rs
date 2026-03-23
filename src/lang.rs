@@ -1,25 +1,15 @@
 //! Load language rules from JSON. Shares py/lyxgc/lang/data/*.json.
 
-use serde::Deserialize;
+use miniserde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 
 use crate::rules;
 use crate::tokenizer;
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct LangData {
-    msgs: Option<HashMap<String, MsgValue>>,
-    simple_rules: Option<Vec<Vec<String>>>,
-    common_rules: Option<bool>,
-    custom_rules: Option<Vec<Vec<serde_json::Value>>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum MsgValue {
-    Tuple([String; 2]),
-    String(String),
+    custom_rules: Option<Vec<Vec<String>>>,
 }
 
 fn build_recursive_brace() -> String {
@@ -88,13 +78,8 @@ pub fn load_language(rule_module: &str) -> Vec<Vec<String>> {
         return vec![];
     }
 
-    let data: LangData = serde_json::from_str(
-        &std::fs::read_to_string(&path).unwrap_or_default(),
-    )
-    .unwrap_or(LangData {
-        msgs: None,
-        simple_rules: None,
-        common_rules: None,
+    let json_str = std::fs::read_to_string(&path).unwrap_or_default();
+    let data: LangData = miniserde::json::from_str(&json_str).unwrap_or(LangData {
         custom_rules: None,
     });
 
@@ -102,26 +87,10 @@ pub fn load_language(rule_module: &str) -> Vec<Vec<String>> {
 
     if let Some(custom_rules) = data.custom_rules {
         for rule in custom_rules {
-            let name = rule
-                .get(0)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let regex = rule
-                .get(1)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let special = rule
-                .get(2)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let desc = rule
-                .get(3)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let name = rule.get(0).cloned().unwrap_or_default();
+            let regex = rule.get(1).cloned().unwrap_or_default();
+            let special = rule.get(2).cloned().unwrap_or_default();
+            let desc = rule.get(3).cloned().unwrap_or_default();
             rules.push(vec![
                 name,
                 substitute_placeholders(&regex),

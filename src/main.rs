@@ -1,69 +1,115 @@
 //! ChkTeX replacement - grammar checker for LyX/LaTeX (Rust frontend).
 
-use clap::Parser;
+use lexopt::prelude::*;
 use std::fs;
 use std::io::{self, Read};
 
-#[derive(Parser)]
-#[command(name = "chktex")]
-struct Args {
-    /// .tex file to check
-    filename: Option<String>,
+fn parse_args() -> Result<
+    (
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+        bool,
+        bool,
+        bool,
+        usize,
+    ),
+    lexopt::Error,
+> {
+    let mut output = None::<String>;
+    let mut input_file = None::<String>;
+    let mut verbose = "1".to_string();
+    let mut lang = None::<String>;
+    let mut rules_only = false;
+    let mut bench_internal = false;
+    let mut cache_regex = false;
+    let mut repeat = 1usize;
+    let mut filename = None::<String>;
 
-    /// Output file
-    #[arg(short, long)]
-    output: Option<String>,
+    let mut parser = lexopt::Parser::from_env();
+    while let Some(arg) = parser.next()? {
+        match arg {
+            Short('o') | Long("output") => {
+                output = Some(parser.value()?.string()?);
+            }
+            Short('x') => {
+                input_file = Some(parser.value()?.string()?);
+            }
+            Short('v') | Long("verbose") => {
+                verbose = parser.value()?.string()?;
+            }
+            Short('l') | Long("lang") => {
+                lang = Some(parser.value()?.string()?);
+            }
+            Long("rules-only") => rules_only = true,
+            Long("bench-internal") => bench_internal = true,
+            Long("cache-regex") => cache_regex = true,
+            Long("repeat") => {
+                repeat = parser.value()?.parse()?;
+            }
+            Short('h') | Long("help") => {
+                eprintln!("Usage: chktex [OPTIONS] [FILE]
+  -o, --output <FILE>    Write output to FILE
+  -x <FILE>              Input file (LyX uses -x file.tex)
+  -v, --verbose <0|1|3>  Verbosity (default: 1)
+  -l, --lang <LANG>      Language (LyX name or locale, e.g. en_US, fr)
+  --rules-only           Skip ChkTeX and lacheck
+  --bench-internal       Print timing breakdown to stderr
+  --cache-regex          Cache compiled regexes per language
+  --repeat <N>           Run check N times (for benchmarking)");
+                std::process::exit(0);
+            }
+            Value(val) if filename.is_none() => {
+                filename = Some(val.string()?);
+            }
+            _ => return Err(arg.unexpected()),
+        }
+    }
 
-    /// Input file (LyX uses -x file.tex)
-    #[arg(short = 'x')]
-    input_file: Option<String>,
+    let resolved_filename = input_file
+        .or(filename)
+        .unwrap_or_else(|| "stdin".to_string());
 
-    /// Verbosity: 0, 1, or 3
-    #[arg(short, long, default_value = "1")]
-    verbose: String,
+    let output_format = format!("-v{}", verbose);
 
-    /// Language: LyX name or locale (e.g. en_US, fr)
-    #[arg(short, long)]
-    lang: Option<String>,
-
-    /// Rules only: skip ChkTeX and lacheck
-    #[arg(long)]
-    rules_only: bool,
-
-    /// Print internal timing breakdown to stderr (for benchmarking)
-    #[arg(long)]
-    bench_internal: bool,
-
-    /// Cache compiled regexes per language (faster on repeat runs in same process)
-    #[arg(long)]
-    cache_regex: bool,
-
-    /// Repeat check N times (for benchmarking cache; reports total time)
-    #[arg(long, default_value = "1")]
-    repeat: usize,
+    Ok((
+        output_format,
+        output,
+        resolved_filename,
+        lang,
+        rules_only,
+        bench_internal,
+        cache_regex,
+        repeat,
+    ))
 }
 
 fn main() -> std::io::Result<()> {
-    let args = Args::parse();
+    let args = parse_args().unwrap_or_else(|e| {
+        eprintln!("chktex: {}", e);
+        std::process::exit(2);
+    });
 
-    let output_format = format!("-v{}", args.verbose);
-    let filename = args
-        .input_file
-        .or(args.filename)
-        .unwrap_or_else(|| "stdin".to_string());
+    let (
+        output_format,
+        output_path,
+        filename,
+        lang,
+        rules_only,
+        bench_internal,
+        cache_regex,
+        repeat,
+    ) = args;
+
     let is_stdin = filename == "stdin";
 
-    let lang_spec = args
-        .lang
+    let lang_spec = lang
         .or_else(|| std::env::var("LYX_LANGUAGE").ok())
         .or_else(|| std::env::var("LANG").ok())
         .unwrap_or_else(|| "en".to_string());
 
-    let run_lacheck_chktex = !is_stdin && !args.rules_only;
-
-    let bench_internal = args.bench_internal;
-    let cache_regex = args.cache_regex;
-    let repeat = args.repeat;
+    let run_lacheck_chktex = !is_stdin && !rules_only;
 
     let stdin_text = if is_stdin {
         let mut s = String::new();
@@ -73,7 +119,7 @@ fn main() -> std::io::Result<()> {
         None
     };
 
-    let (mut output, mut n_errors) = (String::new(), 0usize);
+    let (mut result_text, mut n_errors) = (String::new(), 0usize);
     let t_total = (bench_internal || repeat > 1).then(std::time::Instant::now);
     for iter in 0..repeat {
         let show_phase = bench_internal && (repeat == 1 || iter == 0);
@@ -97,7 +143,7 @@ fn main() -> std::io::Result<()> {
                 cache_regex,
             )?
         };
-        output = result.0;
+        result_text = result.0;
         n_errors = result.1;
     }
     if let Some(t) = t_total {
@@ -109,10 +155,10 @@ fn main() -> std::io::Result<()> {
         );
     }
 
-    if let Some(ref path) = args.output {
-        fs::write(path, output)?;
+    if let Some(ref path) = output_path {
+        fs::write(path, &result_text)?;
     } else {
-        print!("{}", output);
+        print!("{}", result_text);
     }
 
     std::process::exit(if n_errors > 0 { 1 } else { 0 });
