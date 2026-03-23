@@ -36,6 +36,7 @@ fn build_chktex(vendor: &PathBuf) {
     let config_h = out_dir.join("config.h");
     let config_content = if is_windows {
         r#"/* config.h stub for MSVC */
+#define PACKAGE_VERSION "1.7.8"
 #define HAVE_STDARG_H 1
 #define HAVE_VPRINTF 1
 #define HAVE_ACCESS 1
@@ -47,6 +48,7 @@ fn build_chktex(vendor: &PathBuf) {
 "#
     } else {
         r#"/* config.h for Unix (Linux/macOS) */
+#define PACKAGE_VERSION "1.7.8"
 #define HAVE_STDARG_H 1
 #define HAVE_VPRINTF 1
 #define HAVE_UNISTD_H 1
@@ -65,7 +67,7 @@ fn build_chktex(vendor: &PathBuf) {
 #define HAVE_STRDUP 1
 #define HAVE_STRCASECMP 1
 #define HAVE_STRLWR 0
-#define HAVE_DECL_STPCPY 0
+#define HAVE_DECL_STPCPY 1
 "#
     };
     std::fs::write(&config_h, config_content).expect("write config.h");
