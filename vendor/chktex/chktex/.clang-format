@@ -1,0 +1,339 @@
+# Total edit distance (lower is better)
+# Default values are marked with an asterisk
+
+# UseTab: Never
+# Never* 26657, AlignWithSpaces 34627, ForContinuationAndIndentation 34956, Always 35005, ForIndentation 35013
+
+IndentWidth: 4
+# 4 11389, 3 18970, 2* 26517, 1 34346, 8 60712
+
+# BasedOnStyle: LLVM
+# LLVM* 11389, WebKit 12144, Google 17584, Chromium 17626, Mozilla 20156
+
+# ColumnLimit: 80
+
+# AllowAllArgumentsOnNextLine: true
+# false 2474, true* 2474
+
+# AllowAllConstructorInitializersOnNextLine: true
+# false 2474, true* 2474
+
+# AllowAllParametersOfDeclarationOnNextLine: true
+# false 2474, true* 2474
+
+# AllowShortBlocksOnASingleLine: Never
+# Never* 2474, Empty 2474, Always 2474
+
+# AllowShortCaseLabelsOnASingleLine: false
+# false* 2474, true 2600
+
+AllowShortEnumsOnASingleLine: false
+# false 2431, true* 2474
+
+# AllowShortFunctionsOnASingleLine: ???
+# None 2425, Empty 2425, InlineOnly 2429, Inline 2429, All* 2431
+
+# AllowShortIfStatementsOnASingleLine: Never
+# Never* 2425, WithoutElse 2496, Always 2518
+
+# AllowShortLambdasOnASingleLine: All
+# None 2425, Empty 2425, Inline 2425, All* 2425
+
+# AllowShortLoopsOnASingleLine: false
+# false* 2425, true 2427
+
+# AlwaysBreakAfterReturnType: None
+# None* 2425, AllDefinitions 2512, TopLevelDefinitions 2512, All 2580, TopLevel 2580
+
+# AlwaysBreakBeforeMultilineStrings: false
+# false* 2425, true 2428
+
+# AlwaysBreakTemplateDeclarations: MultiLine
+# No 2425, MultiLine* 2425, Yes 2425
+
+# BinPackArguments: true
+# true* 2425, false 2647
+
+# BinPackParameters: true
+# true* 2425, false 2441
+
+# BitFieldColonSpacing: Both
+# Both* 2425, None 2425, Before 2425, After 2425
+
+# BraceWrapping is an advanced setting and is omitted
+
+# BreakAfterJavaFieldAnnotations does not apply to C/C++ code
+
+# BreakBeforeBinaryOperators: None
+# None* 2425, NonAssignment 2460, All 2477
+
+# BreakBeforeConceptDeclarations: true
+# false 2425, true* 2425
+
+# BreakBeforeTernaryOperators: true
+# false 2425, true* 2425
+
+# BreakConstructorInitializers: BeforeColon
+# BeforeColon* 2425, BeforeComma 2425, AfterColon 2425
+
+# BreakInheritanceList: BeforeColon
+# BeforeColon* 2425, BeforeComma 2425, AfterColon 2425
+
+BreakStringLiterals: false
+# false 2405, true* 2425
+
+# CommentPragmas: ???
+# (auto detection is not supported; please manually set)
+
+# CompactNamespaces: false
+# false* 2405, true 2405
+
+# ConstructorInitializerAllOnOneLineOrOnePerLine: false
+# false* 2405, true 2405
+
+# Cpp11BracedListStyle: true
+# true* 2405, false 2486
+
+# UseCRLF: ???
+# (auto detection is not supported; please manually set)
+
+# DeriveLineEnding: ???
+# (auto detection is not supported; please manually set)
+
+# DisableFormat does not apply to C/C++ code
+
+# EmptyLineBeforeAccessModifier: LogicalBlock
+# Never 2405, Leave 2405, LogicalBlock* 2405, Always 2405
+
+# ExperimentalAutoDetectBinPacking: false
+# false* 2405, true 2406
+
+# ForEachMacros: ???
+# (auto detection is not supported; please manually set)
+
+# FixNamespaceComments: true
+# false 2405, true* 2405
+
+# IncludeCategories: ???
+# (auto detection is not supported; please manually set)
+
+# IncludeIsMainRegex: ???
+# (auto detection is not supported; please manually set)
+
+# IncludeStyle is an advanced setting and is omitted
+
+# InsertTrailingCommas: None
+# None* 2405, Wrapped 2405
+
+# JavaImportGroups does not apply to C/C++ code
+
+# JavaScriptQuotes does not apply to C/C++ code
+
+# JavaScriptWrapImports does not apply to C/C++ code
+
+# KeepEmptyLinesAtTheStartOfBlocks: true
+# true* 2405, false 2410
+
+# Language does not apply to C/C++ code
+
+# MacroBlockBegin: ???
+# (auto detection is not supported; please manually set)
+
+# MacroBlockEnd: ???
+# (auto detection is not supported; please manually set)
+
+MaxEmptyLinesToKeep: 1000
+# 1000 2321, 4 2323, 3 2325, 2 2335, 1* 2405, 0 3274
+
+# NamespaceMacros: ???
+# (auto detection is not supported; please manually set)
+
+# ObjCBinPackProtocolList does not apply to C/C++ code
+
+# ObjCBlockIndentWidth does not apply to C/C++ code
+
+# ObjCBreakBeforeNestedBlockParam does not apply to C/C++ code
+
+# ObjCSpaceAfterProperty does not apply to C/C++ code
+
+# ObjCSpaceBeforeProtocolList does not apply to C/C++ code
+
+# PenaltyBreakAssignment is an advanced setting and is omitted
+
+# PenaltyBreakBeforeFirstCallParameter is an advanced setting and is omitted
+
+# PenaltyBreakComment is an advanced setting and is omitted
+
+# PenaltyBreakFirstLessLess is an advanced setting and is omitted
+
+# PenaltyBreakString is an advanced setting and is omitted
+
+# PenaltyBreakTemplateDeclaration is an advanced setting and is omitted
+
+# PenaltyExcessCharacter is an advanced setting and is omitted
+
+# PenaltyIndentedWhitespace is an advanced setting and is omitted
+
+# PenaltyReturnTypeOnItsOwnLine is an advanced setting and is omitted
+
+# PointerAlignment: Right
+# Right* 10856, Middle 11194, Left 11609
+
+# DerivePointerAlignment: false
+# false* 10856, true 10856
+
+# RawStringFormat is an advanced setting and is omitted
+
+# RawStringFormats is an advanced setting and is omitted
+
+ReflowComments: false
+# false 2293, true* 2321
+
+# SortIncludes: true
+# false 2293, true* 2293
+
+# SortJavaStaticImport does not apply to C/C++ code
+
+# SortUsingDeclarations: true
+# false 2293, true* 2293
+
+# SpaceAfterCStyleCast: false
+# false* 2293, true 2338
+
+# SpaceAfterLogicalNot: false
+# false* 2293, true 2390
+
+# SpaceAfterTemplateKeyword: true
+# false 2293, true* 2293
+
+# SpaceAroundPointerQualifiers: Default
+# Default* 2293, Before 2293, After 2293, Both 2293
+
+# SpaceBeforeAssignmentOperators: true
+# true* 2293, false 3013
+
+# SpaceBeforeCaseColon: false
+# false* 2293, true 2528
+
+SpaceBeforeCpp11BracedList: true
+# true 2290, false* 2293
+
+# SpaceBeforeCtorInitializerColon: true
+# false 2290, true* 2290
+
+# SpaceBeforeInheritanceColon: true
+# false 2290, true* 2290
+
+# SpaceBeforeParens: ControlStatements
+# ControlStatements* 2290, Never 2744, Always 3490
+
+# SpaceBeforeRangeBasedForLoopColon: true
+# false 2290, true* 2290
+
+# SpaceBeforeSquareBrackets: false
+# false* 2290, true 2461
+
+# SpaceInEmptyBlock: false
+# false* 2290, true 2290
+
+# SpaceInEmptyParentheses: false
+# false* 2290, true 2304
+
+# SpacesBeforeTrailingComments: 1
+# 0 2290, 1* 2290, 2 2290, 3 2290, 4 2290, 5 2290, 6 2290, 7 2290, 8 2290
+
+# SpacesInAngles: false
+# false* 2290, true 2290
+
+# SpacesInConditionalStatement: false
+# false* 2290, true 3135
+
+# SpacesInContainerLiterals: true
+# false 2290, true* 2290
+
+# SpacesInCStyleCastParentheses: false
+# false* 2290, true 2494
+
+# SpacesInParentheses: false
+# false* 2290, true 6488
+
+# SpacesInSquareBrackets: false
+# false* 2290, true 2616
+
+# Standard: Latest
+# c++03 2290, c++11 2290, Latest* 2290, Auto 2290
+
+# StatementMacros: ???
+# (auto detection is not supported; please manually set)
+
+# StatementAttributeLikeMacros: ???
+# (auto detection is not supported; please manually set)
+
+# TypenameMacros: ???
+# (auto detection is not supported; please manually set)
+
+# WhitespaceSensitiveMacros: ???
+# (auto detection is not supported; please manually set)
+
+# TabWidth: 8
+# 1 10683, 2 10683, 3 10683, 4 10683, 8* 10683
+
+# ContinuationIndentWidth: 4
+# 4* 10683, 3 10753, 2 10817, 1 10938, 8 11373
+
+# AccessModifierOffset: -2
+# -8 10683, -4 10683, -2* 10683, -1 10683, 0 10683, 1 10683, 2 10683, 4 10683, 8 10683
+
+# ConstructorInitializerIndentWidth: ???
+# 0 10683, 1 10683, 2 10683, 3 10683, 4 10683, 8 10683
+
+# IndentCaseBlocks: false
+# false* 10683, true 10683
+
+# IndentCaseLabels: false
+# false* 10683, true 15679
+
+# IndentExternBlock: AfterExternBlock
+# AfterExternBlock* 10683, NoIndent 10683, Indent 10683
+
+# IndentGotoLabels: true
+# false 10683, true* 10683
+
+# IndentPPDirectives: None
+# None* 10683, AfterHash 10969, BeforeHash 11243
+
+# IndentRequires: false
+# false* 10683, true 10683
+
+# IndentWrappedFunctionNames: false
+# false* 10683, true 10683
+
+# NamespaceIndentation: None
+# None* 10683, Inner 10683, All 10683
+
+# AlignAfterOpenBracket: Align
+# Align* 10683, DontAlign 11114, AlwaysBreak 11872
+
+# AlignConsecutiveAssignments: None
+# None* 10683, Consecutive 10919, AcrossEmptyLines 11074, AcrossEmptyLines 11074, AcrossEmptyLinesAndComments 11117
+
+# AlignConsecutiveBitFields: None
+# None* 10683, Consecutive 10683, AcrossEmptyLines 10683, AcrossEmptyLines 10683, AcrossEmptyLinesAndComments 10683
+
+# AlignConsecutiveDeclarations: None
+# None* 10683, Consecutive 11518, AcrossEmptyLines 12154, AcrossEmptyLines 12154, AcrossEmptyLinesAndComments 12223
+
+# AlignConsecutiveMacros: None
+# None* 10683, AcrossEmptyLines 10685, AcrossEmptyLines 10685, Consecutive 10694, AcrossEmptyLinesAndComments 10826
+
+# AlignEscapedNewlines: Right
+# DontAlign 10683, Left 10683, Right* 10683
+
+AlignOperands: DontAlign
+# DontAlign 10560, Align* 10683, AlignAfterOperator 10683
+
+# AlignTrailingComments: true
+# true* 10560, false 10635
+
+BreakBeforeBraces: Allman
+# Allman 6146, Stroustrup 9712, Whitesmiths 9805, Mozilla 10381, WebKit 10389, Linux 10389, Attach* 10560, GNU 39723

@@ -1,2 +1,3 @@
 /target/
-/vendor/
+vendor/chktex/site
+vendor/lacheck.zip

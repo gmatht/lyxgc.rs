@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# Pseudo configure for CTAN releases of material from the TeXLive
+# source tree.
+
+cat <<'_EOT_'
+
+Sorry, but this configure script won't be of much use for you.
+
+This source directory from CTAN can only be compiled in a texk build
+environment. You will need to download the whole environment, please
+refer to http://www.tug.org/texlive/svn/.
+
+It all boils down to a Subversion checkout of
+svn://tug.org/texlive/trunk/Build/source
+This will be the source tree that you can use for compilation. The
+CTAN tree is there for archival and informational purpose.
+
+For your convenience, the original configure script from the source
+tree is available in this directory as configure.texk.
+
+_EOT_
+
+exit 1

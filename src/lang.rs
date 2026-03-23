@@ -1,8 +1,13 @@
 //! Load language rules from JSON. Shares py/lyxgc/lang/data/*.json.
+//! If a JSON file is missing locally, it is downloaded from lyx-gc.py.
 
 use miniserde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
+
+#[cfg(any(feature = "download-ureq", feature = "download-curl"))]
+const LANG_DATA_BASE_URL: &str =
+    "https://raw.githubusercontent.com/gmatht/lyx-gc.py/refs/heads/master/lyxgc/lang/data";
 
 use crate::rules;
 use crate::tokenizer;
@@ -61,6 +66,50 @@ fn substitute_placeholders(s: &str) -> String {
     result
 }
 
+#[cfg(any(feature = "download-ureq", feature = "download-curl"))]
+fn is_safe_module_name(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+#[cfg(feature = "download-curl")]
+fn try_download_lang_json(rule_module: &str) -> Option<String> {
+    if !is_safe_module_name(rule_module) {
+        return None;
+    }
+    let url = format!("{}/{}.json", LANG_DATA_BASE_URL, rule_module);
+    let curl_cmd = if cfg!(target_os = "windows") { "curl.exe" } else { "curl" };
+    std::process::Command::new(curl_cmd)
+        .args(["-fsSL", &url])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout).ok()
+            } else {
+                None
+            }
+        })
+}
+
+#[cfg(all(feature = "download-ureq", not(feature = "download-curl")))]
+fn try_download_lang_json(rule_module: &str) -> Option<String> {
+    if !is_safe_module_name(rule_module) {
+        return None;
+    }
+    let url = format!("{}/{}.json", LANG_DATA_BASE_URL, rule_module);
+    ureq::get(&url)
+        .call()
+        .ok()
+        .and_then(|r| r.into_string().ok())
+}
+
+#[cfg(not(any(feature = "download-ureq", feature = "download-curl")))]
+fn try_download_lang_json(_rule_module: &str) -> Option<String> {
+    None
+}
+
 fn get_data_path(rule_module: &str) -> std::path::PathBuf {
     let data_dir = std::env::var("LYXGC_DATA").ok().map(std::path::PathBuf::from)
         .or_else(|| {
@@ -74,11 +123,17 @@ fn get_data_path(rule_module: &str) -> std::path::PathBuf {
 
 pub fn load_language(rule_module: &str) -> Vec<Vec<String>> {
     let path = get_data_path(rule_module);
-    if !path.exists() {
-        return vec![];
-    }
-
-    let json_str = std::fs::read_to_string(&path).unwrap_or_default();
+    let json_str = if path.exists() {
+        std::fs::read_to_string(&path).unwrap_or_default()
+    } else if let Some(body) = try_download_lang_json(rule_module) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&path, &body);
+        body
+    } else {
+        String::new()
+    };
     let data: LangData = miniserde::json::from_str(&json_str).unwrap_or(LangData {
         custom_rules: None,
     });

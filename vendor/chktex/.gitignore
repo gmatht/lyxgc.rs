@@ -1,0 +1,16 @@
+*.aux
+*.cache
+*.d
+*.dSYM
+*.dvi
+*.log
+*.o
+*.out
+*.pdf
+*.sig
+*.tar.gz
+config.*
+configure
+
+tests/sub1/.config/
+tests/sub2/.chktexrc

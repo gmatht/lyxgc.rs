@@ -152,3 +152,223 @@ On Windows, replace `/dev/null` with `NUL`.
 | `--cache-regex` | ~208 ms   | ~10 ms  |
 
 **~10× speedup** per run when using the cache: first run pays the compile cost (~100 ms); subsequent runs skip it and report `0ns (cached)` for regex compile.
+
+## Binary size (download backends)
+
+When a language JSON file is missing, it can be downloaded from lyx-gc.py. Two backends are available: `curl` (default; shell out, smaller binary) or `ureq` (pure Rust, portable). Build with different features to choose:
+
+```bash
+cd rs
+
+# Baseline: no download (smallest)
+cargo build --release --no-default-features --features chktex
+
+# curl (default; requires curl on PATH)
+cargo build --release --features chktex,download-curl
+
+# ureq (portable, no external tools)
+cargo build --release --no-default-features --features chktex,download-ureq
+```
+
+On Windows, `curl` uses `curl.exe` to avoid the PowerShell alias. Only enable one download feature; if both are enabled, curl takes precedence.
+
+### Size comparison (Windows x64, release)
+
+| Config           | Size (bytes) | Size (MB) |
+|------------------|--------------|-----------|
+| no download      | 1 739 776    | 1.70      |
+| download-curl    | 1 830 912    | 1.79      |
+| download-ureq    | 3 257 344    | 3.11      |
+
+ureq adds ~1.5 MB (rustls, webpki, etc.). curl adds ~90 KB (std::process::Command + URL handling).
+
+## Rust release profiles
+
+Six release profiles allow trade-offs between binary size and speed:
+
+| Profile              | opt-level | Use case                                               |
+|----------------------|-----------|--------------------------------------------------------|
+| `release` (default)  | 3 (regex-automata) / z (others) | **Default.** Small binary, competitive speed; regex-automata hot, rest size-optimized |
+| `release-opt2`       | 2 (all)   | Moderate optimization; smaller than opt3, slightly slower |
+| `release-opt3`       | 3 (all)   | Full speed; explicit opt-level 3 everywhere            |
+| `release-fast-regex` | 3 (extended regex) / s (others) | Same speed as opt3; extends regex hot path  |
+| `release-size`       | s (all)   | Smallest binary; slowest runtime                       |
+| `release-regex-automata-hot-cold-z` | Same as `release` | Alias; kept for compatibility |
+
+### Why automata=opt3, all-other=opt-z is the default
+
+We chose `regex-automata` at opt-level 3 and all other crates at opt-level `z` as the default `release` profile after per-crate benchmarking:
+
+1. **regex-automata dominates the hot path.** Internal timing shows ~62% of no-cache time in regex compilation; per-crate analysis found regex-automata alone at opt-3 gives the best speed/size trade-off (~23 ms faster for ~69 KB vs all-opt-s).
+
+2. **opt-z yields a smaller binary than opt-s.** Cold paths at opt-z shrink the binary ~50 KB vs opt-s, with competitive or indistinguishable speed (benchmark variance is high; differences are within noise).
+
+3. **Single hot crate minimizes codegen footprint.** Bumping other crates (regex, fancy-regex, etc.) from z to s did not improve speed and sometimes slowed runs; keeping only regex-automata hot avoids extra code bloat.
+
+4. **Good balance.** The default profile is ~50 KB smaller than release-hot-regex-automata (all-s cold) and within a few ms in speed. Use `release-opt3` for maximum speed when binary size does not matter.
+
+### Build commands
+
+```bash
+cd rs
+
+# Default (regex-automata=opt3, rest=opt-z)
+cargo build --release
+# Output: target/release/chktex[.exe]
+
+# Opt-level 2 (moderate optimization)
+cargo build --profile release-opt2
+# Output: target/release-opt2/chktex[.exe]
+
+# Explicit opt-level 3 (full speed)
+cargo build --profile release-opt3
+# Output: target/release-opt3/chktex[.exe]
+
+# Extended regex hot path (same speed as opt3, same size)
+cargo build --profile release-fast-regex
+# Output: target/release-fast-regex/chktex[.exe]
+
+# Size-optimized
+cargo build --profile release-size
+# Output: target/release-size/chktex[.exe]
+
+# Same as release (alias)
+cargo build --profile release-regex-automata-hot-cold-z
+# Output: target/release-regex-automata-hot-cold-z/chktex[.exe]
+```
+
+Use the same feature flags as above (`--no-default-features --features chktex` for no download, etc.).
+
+### Benchmarking profiles
+
+```bash
+cd py
+# Single profile (no-cache and cached)
+python benchmark.py --rs-profile release -n 20 --rules-only
+
+# All profiles with no-cache and cached modes
+python benchmark.py --all-profiles --rules-only -n 20
+```
+
+The benchmark reports both no-cache (20 subprocess invocations) and cached (single process with `--cache-regex --repeat 20`) timings, plus binary size.
+
+### Size comparison (Windows x64, no download)
+
+| Profile              | Size (bytes) | Size (MB) |
+|----------------------|--------------|-----------|
+| release (default)    | ~1 510 000   | ~1.44     |
+| release-opt2         | 1 667 072    | 1.59      |
+| release-opt3         | 1 739 776    | 1.70      |
+| release-fast-regex   | 1 739 776    | 1.70      |
+| release-size         | 1 496 064    | 1.43      |
+
+`release-size` is the smallest. Default `release` (automata=3, rest=z) is ~50 KB larger than release-size, ~230 KB smaller than release-opt3.
+
+### Speed comparison (rules-only, simple_errors.tex, n=20, Windows)
+
+#### No cache (20 subprocess invocations per run)
+
+| Profile              | Avg (ms) | Min | Max |
+|----------------------|----------|-----|-----|
+| release (default)    | ~80–90   | ~75 | ~95 |
+| release-opt2         | 83       | 77  | 93  |
+| release-opt3         | 78       | 74  | 94  |
+| release-fast-regex   | 77       | 74  | 84  |
+| release-size         | 102      | 99  | 111 |
+
+`release-opt3` and `release-fast-regex` are fastest (~78 ms). Default `release` (automata=3, rest=z) is competitive; variance is high, often within ~5 ms of release-hot-regex-automata.
+
+#### Cached (single process, `--cache-regex --repeat 20`)
+
+| Profile              | Avg (ms) | Min | Max |
+|----------------------|----------|-----|-----|
+| release (default)    | ~7–8     | -   | -   |
+| release-opt2         | 7.4      | 7.4 | 7.4 |
+| release-opt3         | 7.2      | 7.2 | 7.2 |
+| release-fast-regex   | 7.2      | 7.2 | 7.2 |
+| release-size         | 9.4      | 9.4 | 9.4 |
+
+With regex caching, `release-opt3` and `release-fast-regex` are fastest. Default `release` is typically ~7–8 ms per run. Use `--cache-regex` when LyX or another client invokes the checker many times in one process.
+
+## Hot crate per-crate analysis
+
+Each profile compiles **only one** hot crate at opt-level 3; all others at opt-level s. Baseline: `release-size` (all opt-s).
+
+```bash
+cd py
+python benchmark.py --hot-crate-analysis -n 20
+```
+
+### Results (rules-only, simple_errors.tex, n=20, Windows)
+
+| Hot crate (only opt-3) | Size (MB) | vs baseline | No-cache (ms) | vs baseline | Cached (ms) | vs baseline |
+|------------------------|-----------|-------------|---------------|-------------|-------------|--------------|
+| (baseline: release-size) | 1.43 | - | 103 | - | 10.1 | - |
+| regex | 1.43 | +0 | 104 | +1.5 | 9.7 | -0.4 |
+| fancy-regex | 1.43 | +0 | 103 | +0.1 | 9.5 | -0.6 |
+| aho-corasick | 1.43 | +0 | 104 | +1.4 | 9.6 | -0.5 |
+| memchr | 1.43 | +0 | 110 | +7.5 | 15.1 | +5.0 |
+| regex-syntax | 1.48 | +56 KB | 105 | +2.9 | 9.3 | -0.8 |
+| regex-automata | 1.49 | +71 KB | 79 | -23 | 7.5 | -2.6 |
+| bit-set | 1.43 | +0 | 105 | +2.5 | 10.4 | +0.3 |
+| bit-vec | 1.43 | -0.5 KB | 106 | +3.8 | 9.8 | -0.3 |
+
+### Findings
+
+- **regex-automata** gives the best no-cache speed/size trade-off: ~23 ms faster for ~69 KB (0.33 ms/KB).
+- **memchr** alone at opt-3 is counterproductive: slower in both modes (especially cached +5 ms); likely different inlining/codegen when isolated.
+- **regex-syntax** adds 56 KB and small cached gain (-0.8 ms); modest benefit.
+- Most single-crate optimizations add negligible size (PE alignment) but don't improve no-cache speed; only regex-automata shows a large no-cache gain.
+
+## regex-automata hot with cold paths at opt-z
+
+Profile `release-regex-automata-hot-cold-z`: regex-automata at opt-level 3, all other crates at opt-level `z` (size-oriented). Shrinks cold-path code more than opt-level s.
+
+```bash
+cd rs
+cargo build --profile release-regex-automata-hot-cold-z --no-default-features --features chktex
+# Output: target/release-regex-automata-hot-cold-z/chktex[.exe]
+```
+
+### Results (rules-only, simple_errors.tex, n=20, Windows)
+
+| Profile                              | Size (MB) | No-cache (ms) | Cached (ms) |
+|-------------------------------------|-----------|---------------|-------------|
+| release-size (baseline)             | 1.43      | 103           | 10.1        |
+| release-hot-regex-automata (opt-s cold) | 1.49   | 79            | 7.5         |
+| **release-regex-automata-hot-cold-z**   | 1.44   | 82–86         | 8.5         |
+
+### Trade-off vs release-hot-regex-automata
+
+- **~50 KB smaller** (1.44 vs 1.49 MB) from cold paths at opt-z instead of opt-s
+- **~3–4 ms slower** no-cache (82 vs 79 ms)
+- **~1 ms slower** cached (8.5 vs 7.5 ms)
+
+Use this profile when you want most of the regex-automata speed benefit with a smaller binary.
+
+## automata=opt3, one hot crate=s, rest=z
+
+Profiles with regex-automata at opt-3 and exactly one other hot crate at opt-s (rest at opt-z). Tests whether bumping any cold crate from z to s improves speed.
+
+```bash
+cd py
+python benchmark.py --automata3-s-rest-z-analysis -n 20 --rules-only
+```
+
+### Results (rules-only, simple_errors.tex, n=20, Windows)
+
+| Profile                 | Size (MB) | vs base | No-cache (ms) | vs base | Cached (ms) | vs base |
+|-------------------------|-----------|---------|---------------|---------|-------------|---------|
+| (baseline all-z)        | 1.44      | -       | 74.6          | -       | 7.44        | -       |
+| regex=s                 | 1.43      | -3 KB   | 78.6          | +4.0    | 7.94        | +0.50   |
+| fancy-regex=s           | 1.43      | -10 KB  | 80.0          | +5.4    | 7.75        | +0.30   |
+| aho-corasick=s          | 1.43      | -12 KB  | 80.0          | +5.5    | 7.51        | +0.07   |
+| memchr=s                | 1.44      | -0.5 KB | 81.3          | +6.7    | 7.72        | +0.28   |
+| regex-syntax=s          | 1.45      | +15 KB  | 79.4          | +4.8    | 7.43        | -0.01   |
+| bit-set=s               | 1.44      | +0      | 79.4          | +4.8    | 7.73        | +0.28   |
+| bit-vec=s               | 1.44      | +0      | 80.0          | +5.4    | 7.52        | +0.08   |
+
+### Findings
+
+- **Baseline (all-z) is fastest.** Bumping any cold crate from opt-z to opt-s slows no-cache by 4–7 ms.
+- Keep cold paths at opt-z; only regex-automata needs opt-3. Use `release-regex-automata-hot-cold-z`.

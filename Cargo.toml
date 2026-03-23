@@ -5,8 +5,10 @@ edition = "2021"
 description = "Grammar checker for LyX and LaTeX (Rust frontend)"
 
 [features]
-default = ["chktex"]
+default = ["chktex", "download-curl"]
 chktex = []
+download-ureq = ["dep:ureq"]
+download-curl = []
 
 [build-dependencies]
 cc = "1.0"
@@ -17,12 +19,161 @@ fancy-regex = "0.12"
 lazy_static = "1.4"
 miniserde = "0.1"
 lexopt = "0.3"
+ureq = { version = "2.10", optional = true, default-features = false, features = ["tls"] }
 
 [profile.release]
 lto = true
 strip = true
 panic = "abort"
 codegen-units = 1
+
+# regex-automata at opt-3 (hot path: regex compile dominates); all others at opt-z (smaller binary)
+[profile.release.package."*"]
+opt-level = "z"
+
+[profile.release.package.regex-automata]
+opt-level = 3
+
+# Opt-level 2 for all crates (moderate optimization)
+[profile.release-opt2]
+inherits = "release"
+opt-level = 2
+
+[profile.release-opt2.package."*"]
+opt-level = 2
+
+# Explicit full-optimization variant (opt-level 3 for all crates)
+[profile.release-opt3]
+inherits = "release"
+
+# Override: full opt-level 3 for all deps (not size-optimized)
+[profile.release-opt3.package."*"]
+opt-level = 3
+
+# Size-optimized (opt-level s for all); smaller binary, may be slower
+[profile.release-size]
+inherits = "release"
+opt-level = "s"
+
+# Override inherited hot-path overrides so everything uses opt-level s
+[profile.release-size.package."*"]
+opt-level = "s"
+
+# Extended regex hot path (regex-syntax, regex-automata, bit-set, bit-vec at opt-3)
+[profile.release-fast-regex]
+inherits = "release"
+
+[profile.release-fast-regex.package.regex-syntax]
+opt-level = 3
+[profile.release-fast-regex.package.regex-automata]
+opt-level = 3
+[profile.release-fast-regex.package.bit-set]
+opt-level = 3
+[profile.release-fast-regex.package.bit-vec]
+opt-level = 3
+
+# Per-crate analysis: only this crate at opt-3, all others at opt-s
+[profile.release-hot-regex]
+inherits = "release-size"
+
+[profile.release-hot-regex.package.regex]
+opt-level = 3
+
+[profile.release-hot-fancy-regex]
+inherits = "release-size"
+
+[profile.release-hot-fancy-regex.package.fancy-regex]
+opt-level = 3
+
+[profile.release-hot-aho-corasick]
+inherits = "release-size"
+
+[profile.release-hot-aho-corasick.package.aho-corasick]
+opt-level = 3
+
+[profile.release-hot-memchr]
+inherits = "release-size"
+
+[profile.release-hot-memchr.package.memchr]
+opt-level = 3
+
+[profile.release-hot-regex-syntax]
+inherits = "release-size"
+
+[profile.release-hot-regex-syntax.package.regex-syntax]
+opt-level = 3
+
+[profile.release-hot-regex-automata]
+inherits = "release-size"
+
+[profile.release-hot-regex-automata.package.regex-automata]
+opt-level = 3
+
+[profile.release-hot-bit-set]
+inherits = "release-size"
+
+[profile.release-hot-bit-set.package.bit-set]
+opt-level = 3
+
+[profile.release-hot-bit-vec]
+inherits = "release-size"
+
+[profile.release-hot-bit-vec.package.bit-vec]
+opt-level = 3
+
+# regex-automata at opt-3 (hot), all others at opt-z (cold, size-optimized)
+[profile.release-regex-automata-hot-cold-z]
+inherits = "release-size"
+opt-level = "z"
+
+[profile.release-regex-automata-hot-cold-z.package."*"]
+opt-level = "z"
+
+[profile.release-regex-automata-hot-cold-z.package.regex-automata]
+opt-level = 3
+
+# automata=3, one hot crate=s, rest=z (to test impact of bumping each from z to s)
+[profile.release-automata3-regex-s-rest-z]
+inherits = "release-regex-automata-hot-cold-z"
+
+[profile.release-automata3-regex-s-rest-z.package.regex]
+opt-level = "s"
+
+[profile.release-automata3-fancy-regex-s-rest-z]
+inherits = "release-regex-automata-hot-cold-z"
+
+[profile.release-automata3-fancy-regex-s-rest-z.package.fancy-regex]
+opt-level = "s"
+
+[profile.release-automata3-aho-corasick-s-rest-z]
+inherits = "release-regex-automata-hot-cold-z"
+
+[profile.release-automata3-aho-corasick-s-rest-z.package.aho-corasick]
+opt-level = "s"
+
+[profile.release-automata3-memchr-s-rest-z]
+inherits = "release-regex-automata-hot-cold-z"
+
+[profile.release-automata3-memchr-s-rest-z.package.memchr]
+opt-level = "s"
+
+[profile.release-automata3-regex-syntax-s-rest-z]
+inherits = "release-regex-automata-hot-cold-z"
+
+[profile.release-automata3-regex-syntax-s-rest-z.package.regex-syntax]
+opt-level = "s"
+
+[profile.release-automata3-bit-set-s-rest-z]
+inherits = "release-regex-automata-hot-cold-z"
+
+[profile.release-automata3-bit-set-s-rest-z.package.bit-set]
+opt-level = "s"
+
+[profile.release-automata3-bit-vec-s-rest-z]
+inherits = "release-regex-automata-hot-cold-z"
+
+[profile.release-automata3-bit-vec-s-rest-z.package.bit-vec]
+opt-level = "s"
 
 [lib]
 name = "lyxgc"

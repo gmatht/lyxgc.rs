@@ -1,0 +1,90 @@
+#!/bin/sh
+
+PROJ=chktex
+VERSION=$1
+TAG=version-$VERSION
+GUSER=$(git config user.email | cut -d'@' -f1)
+SAVANNAH_USER=${SAVANNAH_USER-$GUSER}
+
+if [ -z "$VERSION" ]; then
+	echo "No version given."
+    echo "Remember to change the version in configure.ac and update NEWS"
+	exit 1
+fi
+
+if [ "$VERSION" = "snapshot" ]; then
+	echo "Doing snapshot"
+	VERSION=snapshot-`date +%Y.%m.%d`
+    TAG=HEAD
+fi
+
+FILE="$PROJ-$VERSION.tar.gz"
+BASEDIR="$PROJ-$VERSION/"
+
+# Export clean copy of the repository (the chktex directory only)
+git archive "$TAG" -o "$FILE" chktex
+if [ $? != 0 ]; then
+	echo "Error while checking out the version."
+    echo "Did you forget to tag it?  Try"
+    echo "git tag $TAG; git push --tags"
+	exit 1
+fi
+
+rm -rf "$BASEDIR"
+mkdir "$BASEDIR"
+
+# Strip off the chktex directory, so that it's what we would expect
+tar xzvf "$FILE" -C "$BASEDIR" --strip-components 1
+
+# Clean it up just in case
+rm "$FILE"
+
+# Prepare version for release
+if [ -f "$BASEDIR/autogen.sh" ]; then
+	pushd "$BASEDIR"
+	./autogen.sh || exit 1
+    rm -rf autom4te.cache/
+    if [ "x$2" != "x" ]; then
+        echo Adding $2 to the tarball
+        cp "$2" . || exit 1
+    else
+        echo
+        echo "** Consider adding $PWD/chktex/ChkTeX.pdf to the tarball passing as a second argument **"
+        echo
+    fi
+	popd
+else
+    echo "Something went wrong, couldn't find $BASEDIR/autogen.sh"
+    exit 1
+fi
+
+# (Re)create tar.gz file
+tar cvhzf "$FILE" "$BASEDIR/"
+
+# Create a CTAN friendly tarball (no version in the directory name)
+if which gtar; then
+    # mv "$BASEDIR" chktex
+    gtar cvhzf "ctan-$FILE" "$BASEDIR" --transform "s/${BASEDIR%/}/chktex/"
+else
+    echo
+    echo "** GNU tar not found, consider installing to create CTAN friendly tar file **"
+    echo
+fi
+
+rm -rf "$BASEDIR"
+
+# Sign the tar.gz
+echo "Now we GPG sign the release:"
+gpg --detach --sign "$FILE" || exit 1
+
+echo "And upload to savannah"
+rsync -tv "$FILE" "$FILE.sig" $SAVANNAH_USER@dl.sv.gnu.org:/releases/chktex
+if [ $? != 0 ]; then
+    echo "Uploading failed!"
+    exit 1
+fi
+
+cp chktex/ChkTeX.pdf chktex-web/
+echo "Now update the website (index.html and ChkTeX.pdf), and upload to CTAN"
+echo "Remember that CTAN wants a tar file with just chktex, no version as the directory"
+echo "You can see previous answers to the many questions at https://ctan.org/pkg/chktex"

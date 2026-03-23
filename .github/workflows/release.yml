@@ -1,0 +1,55 @@
+# Build and publish chktex binaries on version tag push.
+# Trigger: git tag v0.1.0 && git push origin v0.1.0
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: chktex-linux-x86_64
+            suffix: .tar.gz
+          - os: windows-latest
+            artifact: chktex-windows-x86_64
+            suffix: .zip
+          - os: macos-latest
+            artifact: chktex-macos-aarch64
+            suffix: .tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          BIN=target/release/chktex
+          cp "$BIN" "${{ matrix.artifact }}"
+          GZIP=-9 tar czf "${{ matrix.artifact }}${{ matrix.suffix }}" "${{ matrix.artifact }}"
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $bin = "target/release/chktex.exe"
+          Compress-Archive -Path $bin -DestinationPath "${{ matrix.artifact }}${{ matrix.suffix }}" -Force
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: ${{ matrix.artifact }}${{ matrix.suffix }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

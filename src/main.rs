@@ -23,7 +23,7 @@ fn parse_args() -> Result<
     let mut lang = None::<String>;
     let mut rules_only = false;
     let mut bench_internal = false;
-    let mut cache_regex = false;
+    let mut cache_regex = true;
     let mut repeat = 1usize;
     let mut filename = None::<String>;
 
@@ -45,6 +45,7 @@ fn parse_args() -> Result<
             Long("rules-only") => rules_only = true,
             Long("bench-internal") => bench_internal = true,
             Long("cache-regex") => cache_regex = true,
+            Long("no-cache-regex") => cache_regex = false,
             Long("repeat") => {
                 repeat = parser.value()?.parse()?;
             }
@@ -56,7 +57,8 @@ fn parse_args() -> Result<
   -l, --lang <LANG>      Language (LyX name or locale, e.g. en_US, fr)
   --rules-only           Skip ChkTeX and lacheck
   --bench-internal       Print timing breakdown to stderr
-  --cache-regex          Cache compiled regexes per language
+  --cache-regex          Cache compiled regexes per language (default)
+  --no-cache-regex       Disable regex caching
   --repeat <N>           Run check N times (for benchmarking)");
                 std::process::exit(0);
             }
