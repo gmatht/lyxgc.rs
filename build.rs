@@ -29,11 +29,52 @@ fn main() {
 fn build_chktex(vendor: &PathBuf) {
     let chktex_dir = vendor.join("chktex").join("chktex");
     let getopt_dir = vendor.join("chktex").join("getopt");
+    let is_windows = std::env::var("TARGET").map(|t| t.contains("windows")).unwrap_or(false);
+
+    // Generate config.h (ChkTeX needs it; vendor/.gitignore excludes configured config.h)
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let config_h = out_dir.join("config.h");
+    let config_content = if is_windows {
+        r#"/* config.h stub for MSVC */
+#define HAVE_STDARG_H 1
+#define HAVE_VPRINTF 1
+#define HAVE_ACCESS 1
+#define HAVE_FILENO 1
+#define HAVE_ISATTY 1
+#define HAVE_STRCASECMP 0
+#define HAVE_STRLWR 0
+#define HAVE_STRDUP 1
+"#
+    } else {
+        r#"/* config.h for Unix (Linux/macOS) */
+#define HAVE_STDARG_H 1
+#define HAVE_VPRINTF 1
+#define HAVE_UNISTD_H 1
+#define HAVE_LIMITS_H 1
+#define HAVE_STRINGS_H 1
+#define HAVE_INTTYPES_H 1
+#define HAVE_STDINT_H 1
+#define HAVE_FILENO 1
+#define HAVE_ISATTY 1
+#define HAVE_ACCESS 1
+#define HAVE_DIRENT_H 1
+#define HAVE_READDIR 1
+#define HAVE_OPENDIR 1
+#define HAVE_CLOSEDIR 1
+#define HAVE_STAT 1
+#define HAVE_STRDUP 1
+#define HAVE_STRCASECMP 1
+#define HAVE_STRLWR 0
+#define HAVE_DECL_STPCPY 0
+"#
+    };
+    std::fs::write(&config_h, config_content).expect("write config.h");
 
     let mut build = cc::Build::new();
     build
         .define("HAVE_CONFIG_H", None)
         .define("CHKTEX_LIB", None)
+        .include(&out_dir)
         .include(&chktex_dir)
         .file(chktex_dir.join("ChkTeX.c"))
         .file(chktex_dir.join("FindErrs.c"))
@@ -42,7 +83,6 @@ fn build_chktex(vendor: &PathBuf) {
         .file(chktex_dir.join("OpSys.c"))
         .file(vendor.join("chktex").join("chktex_lib.c"));
 
-    let is_windows = std::env::var("TARGET").map(|t| t.contains("windows")).unwrap_or(false);
     if !is_windows {
         build.file(vendor.join("chktex").join("strlwr_compat.c"));
     }
