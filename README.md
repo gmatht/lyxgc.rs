@@ -34,6 +34,15 @@ chktex -l fr yourfile.tex
 chktex --rules-only yourfile.tex   # Skip ChkTeX/lacheck
 ```
 
+## Language JSON Cache
+
+For languages whose `lang/data/{module}.json` file is not bundled with the binary, the checker downloads it on demand and caches it:
+
+- Unix: `$XDG_CACHE_HOME/lyxgc` (fallback: `$HOME/.cache/lyxgc`)
+- Windows: `%LOCALAPPDATA%\lyxgc`
+
+Set `LYXGC_DATA` to a directory to override both reads and downloads (writes to `LYXGC_DATA/{module}.json`).
+
 ## Releases
 
 Binaries are built on tag push (e.g. `v0.1.0`). See [Releases](https://github.com/gmatht/lyxgc.rs/releases).

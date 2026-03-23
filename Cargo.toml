@@ -34,6 +34,21 @@ opt-level = "z"
 [profile.release.package.regex-automata]
 opt-level = 3
 
+# Keep regex-syntax at z (s increased size), but bump these z->s crates:
+# benchmark showed no size growth (or slight shrink) with opt-level s.
+[profile.release.package.regex]
+opt-level = "s"
+[profile.release.package.fancy-regex]
+opt-level = "s"
+[profile.release.package.aho-corasick]
+opt-level = "s"
+[profile.release.package.memchr]
+opt-level = "s"
+[profile.release.package.bit-set]
+opt-level = "s"
+[profile.release.package.bit-vec]
+opt-level = "s"
+
 # Opt-level 2 for all crates (moderate optimization)
 [profile.release-opt2]
 inherits = "release"

@@ -110,15 +110,64 @@ fn try_download_lang_json(_rule_module: &str) -> Option<String> {
     None
 }
 
-fn get_data_path(rule_module: &str) -> std::path::PathBuf {
-    let data_dir = std::env::var("LYXGC_DATA").ok().map(std::path::PathBuf::from)
-        .or_else(|| {
-            let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-            let repo = manifest.parent()?;
-            Some(repo.join("py").join("lyxgc").join("lang").join("data"))
-        })
+fn get_bundled_data_path(rule_module: &str) -> std::path::PathBuf {
+    // Prefer the JSON shipped alongside the repository.
+    // For distributed binaries without the `py/` directory, this path may not exist.
+    let data_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|repo| Some(repo.join("py").join("lyxgc").join("lang").join("data")))
         .unwrap_or_else(|| Path::new("py/lyxgc/lang/data").to_path_buf());
     data_dir.join(format!("{}.json", rule_module))
+}
+
+fn get_cache_base_dir() -> std::path::PathBuf {
+    // Cache directory for downloaded JSON.
+    // Default:
+    // - Unix: $XDG_CACHE_HOME/lyxgc, fallback to $HOME/.cache/lyxgc
+    // - Windows: %LOCALAPPDATA%\\lyxgc
+    //
+    // Note: `LYXGC_DATA` overrides reads+writes entirely (handled in `load_language`).
+    #[cfg(windows)]
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            return Path::new(&local).join("lyxgc");
+        }
+        if let Ok(user) = std::env::var("USERPROFILE") {
+            return Path::new(&user).join(".cache").join("lyxgc");
+        }
+        return Path::new(".").join("lyxgc_cache");
+    }
+
+    #[cfg(not(windows))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
+            return Path::new(&xdg).join("lyxgc");
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            return Path::new(&home).join(".cache").join("lyxgc");
+        }
+        return Path::new(".").join("lyxgc_cache");
+    }
+}
+
+fn get_cache_data_path(rule_module: &str) -> std::path::PathBuf {
+    get_cache_base_dir().join(format!("{}.json", rule_module))
+}
+
+fn get_data_path(rule_module: &str) -> std::path::PathBuf {
+    // Single decision point for where `load_language()` reads/writes:
+    // - If `LYXGC_DATA` is set: always use it for reads+writes.
+    // - Otherwise: prefer bundled JSON if it exists, else use the OS cache location.
+    if let Ok(override_dir) = std::env::var("LYXGC_DATA") {
+        return Path::new(&override_dir).join(format!("{}.json", rule_module));
+    }
+
+    let bundled_path = get_bundled_data_path(rule_module);
+    if bundled_path.exists() {
+        bundled_path
+    } else {
+        get_cache_data_path(rule_module)
+    }
 }
 
 pub fn load_language(rule_module: &str) -> Vec<Vec<String>> {
@@ -156,4 +205,87 @@ pub fn load_language(rule_module: &str) -> Vec<Vec<String>> {
     }
 
     rules
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    #[cfg(not(windows))]
+    fn cache_dir_uses_xdg_cache_home() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
+        let prev_xdg = std::env::var("XDG_CACHE_HOME").ok();
+        let prev_home = std::env::var("HOME").ok();
+
+        std::env::set_var("XDG_CACHE_HOME", "/tmp/xdg_cache_home_test");
+        std::env::remove_var("HOME");
+
+        let base = get_cache_base_dir();
+        let expected = Path::new("/tmp/xdg_cache_home_test").join("lyxgc");
+        assert_eq!(base, expected);
+
+        match prev_xdg {
+            Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+            None => std::env::remove_var("XDG_CACHE_HOME"),
+        }
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn cache_dir_falls_back_to_home_cache() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
+        let prev_xdg = std::env::var("XDG_CACHE_HOME").ok();
+        let prev_home = std::env::var("HOME").ok();
+
+        std::env::remove_var("XDG_CACHE_HOME");
+        std::env::set_var("HOME", "/tmp/home_cache_test");
+
+        let base = get_cache_base_dir();
+        let expected = Path::new("/tmp/home_cache_test").join(".cache").join("lyxgc");
+        assert_eq!(base, expected);
+
+        match prev_xdg {
+            Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+            None => std::env::remove_var("XDG_CACHE_HOME"),
+        }
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn cache_dir_uses_local_app_data() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
+        let prev_local = std::env::var("LOCALAPPDATA").ok();
+        let prev_user = std::env::var("USERPROFILE").ok();
+
+        std::env::set_var("LOCALAPPDATA", r"C:\TempLocalAppData");
+        std::env::remove_var("USERPROFILE");
+
+        let base = get_cache_base_dir();
+        let expected = Path::new(r"C:\TempLocalAppData").join("lyxgc");
+        assert_eq!(base, expected);
+
+        match prev_local {
+            Some(v) => std::env::set_var("LOCALAPPDATA", v),
+            None => std::env::remove_var("LOCALAPPDATA"),
+        }
+        match prev_user {
+            Some(v) => std::env::set_var("USERPROFILE", v),
+            None => std::env::remove_var("USERPROFILE"),
+        }
+    }
 }

@@ -10,6 +10,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     strategy:
@@ -27,7 +30,7 @@ jobs:
             suffix: .tar.gz
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -49,10 +52,30 @@ jobs:
           $bin = "target/release/chktex.exe"
           Compress-Archive -Path $bin -DestinationPath "${{ matrix.artifact }}${{ matrix.suffix }}" -Force
 
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          files: ${{ matrix.artifact }}${{ matrix.suffix }}
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}${{ matrix.suffix }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: chktex-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update GitHub release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" dist/* --clobber

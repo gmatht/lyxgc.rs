@@ -126,30 +126,31 @@ Typical breakdown (WSL, n=5 runs):
 
 2. **Engine design**: Perl's regex engine (Oniguruma-derived) is C code optimized over decades for common text-processing patterns. `fancy-regex` is a hybrid: it uses the standard `regex` crate for simple patterns and falls back to backtracking for fancy features. The rules use `(?i)`, `(?<!...)`, `(?!...)` etc., so they go through the backtracking path, which has different performance characteristics.
 
-3. **No caching**: Compiling regexes could be cached (e.g. per language module), but currently each `find_errors` call recompiles all rules. Perl keeps compiled regexes in memory across the run.
+3. **No caching by default**: Compiling regexes could be cached (e.g. per language module), but unless `--cache-regex` is enabled, each `chktex` invocation compiles all rules. With `--cache-regex`, compiled rules are cached for the lifetime of the process, so it only helps when the same process performs multiple checks.
 
 ## Regex caching (`--cache-regex`)
 
-Compiled rules are cached per language. Use `--cache-regex` when running multiple checks in the same process (e.g. LyX calling the checker many times) to avoid recompiling the ~266 regexes on every run.
+`--cache-regex` enables an in-process cache of compiled rules (keyed by language module). This is useful for scenarios where the checker is called repeatedly from the *same* long-lived process.
+
+For “real” `chktex` wall-clock timing (fresh process per check, so startup time is included), benchmark without `--repeat` and do one invocation per timing sample (see `py/benchmark.py`).
 
 ### Benchmark commands
 
 ```bash
-# Without cache (cold compile every run)
+# In-process warm benchmark (single process, uses chktex's `--repeat`)
+# Without cache: every loop iteration recompiles the ~266 regexes.
 ./rs/target/release/chktex --bench-internal --rules-only --repeat 20 py/tests/fixtures/simple_errors.tex -o /dev/null
 
-# With cache (compile once, reuse for runs 2–20)
+# With cache: compiled rules are reused for iterations 2–20 within the same process.
 ./rs/target/release/chktex --bench-internal --rules-only --cache-regex --repeat 20 py/tests/fixtures/simple_errors.tex -o /dev/null
 ```
 
 On Windows, replace `/dev/null` with `NUL`.
 
-### Observed cache benefit (Windows, n=20)
+### Cache-regex expectations (what to benchmark)
 
-| Mode   | Total (20 runs) | Avg/run |
-|--------|------------------|---------|
-| No cache | ~2.08 s         | ~104 ms |
-| `--cache-regex` | ~208 ms   | ~10 ms  |
+- **Per-invocation wall-clock timing** (fresh process per run; no `--repeat`): `--cache-regex` should be close to no-cache.
+- **In-process warm timing** (single process with `--repeat`): `--cache-regex` can be much faster.
 
 **~10× speedup** per run when using the cache: first run pays the compile cost (~100 ms); subsequent runs skip it and report `0ns (cached)` for regex compile.
 
@@ -299,7 +300,7 @@ cd py
 python benchmark.py --hot-crate-analysis -n 20
 ```
 
-### Results (rules-only, simple_errors.tex, n=20, Windows)
+### Results (rules-only, simple_errors.tex, n=20, Windows, rerun)
 
 | Hot crate (only opt-3) | Size (MB) | vs baseline | No-cache (ms) | vs baseline | Cached (ms) | vs baseline |
 |------------------------|-----------|-------------|---------------|-------------|-------------|--------------|
@@ -359,16 +360,40 @@ python benchmark.py --automata3-s-rest-z-analysis -n 20 --rules-only
 
 | Profile                 | Size (MB) | vs base | No-cache (ms) | vs base | Cached (ms) | vs base |
 |-------------------------|-----------|---------|---------------|---------|-------------|---------|
-| (baseline all-z)        | 1.44      | -       | 74.6          | -       | 7.44        | -       |
-| regex=s                 | 1.43      | -3 KB   | 78.6          | +4.0    | 7.94        | +0.50   |
-| fancy-regex=s           | 1.43      | -10 KB  | 80.0          | +5.4    | 7.75        | +0.30   |
-| aho-corasick=s          | 1.43      | -12 KB  | 80.0          | +5.5    | 7.51        | +0.07   |
-| memchr=s                | 1.44      | -0.5 KB | 81.3          | +6.7    | 7.72        | +0.28   |
-| regex-syntax=s          | 1.45      | +15 KB  | 79.4          | +4.8    | 7.43        | -0.01   |
-| bit-set=s               | 1.44      | +0      | 79.4          | +4.8    | 7.73        | +0.28   |
-| bit-vec=s               | 1.44      | +0      | 80.0          | +5.4    | 7.52        | +0.08   |
+| (baseline all-z)        | 1.44      | -       | 134.22        | -       | 113.06      | -       |
+| regex=s                 | 1.43      | -3 KB   | 115.50        | -18.7   | 106.42      | -6.64   |
+| fancy-regex=s           | 1.43      | -10 KB  | 134.26        | +0.0    | 102.79      | -10.27  |
+| aho-corasick=s          | 1.43      | -12 KB  | 112.39        | -21.8   | 105.59      | -7.47   |
+| memchr=s                | 1.44      | -0.5 KB | 108.97        | -25.3   | 132.15      | +19.09  |
+| regex-syntax=s          | 1.45      | +15 KB  | 114.31        | -19.9   | 106.27      | -6.78   |
+| bit-set=s               | 1.44      | +0      | 108.31        | -25.9   | 104.15      | -8.91   |
+| bit-vec=s               | 1.44      | +0      | 115.58        | -18.6   | 105.00      | -8.06   |
 
 ### Findings
 
-- **Baseline (all-z) is fastest.** Bumping any cold crate from opt-z to opt-s slows no-cache by 4–7 ms.
-- Keep cold paths at opt-z; only regex-automata needs opt-3. Use `release-regex-automata-hot-cold-z`.
+- **Size rule still holds:** `regex-syntax=s` is the only variant that clearly increases binary size (+15 KB).
+- For this rerun, **most z->s variants are faster than all-z** in no-cache timing.
+- `memchr=s` is an outlier: fastest no-cache here, but much worse cached timing (+19 ms vs baseline).
+- Practical policy for default `release`: set z->s for `regex`, `fancy-regex`, `aho-corasick`, `memchr`, `bit-set`, `bit-vec`; keep `regex-syntax` at z.
+
+## Updated default `--release` report (Windows, rules-only)
+
+`rs/Cargo.toml` default `release` profile was updated accordingly:
+
+- Keep `regex-automata=3`
+- Keep `regex-syntax=z`
+- Set `regex`, `fancy-regex`, `aho-corasick`, `memchr`, `bit-set`, `bit-vec` to `s`
+
+Measured with:
+
+```bash
+cd py
+python benchmark.py --rs-only --rs-profile release --rules-only -n 20
+```
+
+Observed results (two immediate runs):
+
+| Run | No-cache avg (ms) | Cached avg (ms) | Size |
+|-----|-------------------|-----------------|------|
+| 1   | 176.41            | 146.16          | 1.62 MB |
+| 2   | 122.12            | 136.54          | 1.62 MB |

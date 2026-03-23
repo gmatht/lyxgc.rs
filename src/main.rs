@@ -39,6 +39,25 @@ fn parse_args() -> Result<
             Short('v') | Long("verbose") => {
                 verbose = parser.value()?.string()?;
             }
+            // Compatibility with classic chktex flags used by LyX:
+            // -n<id> (suppress rule), -q (quiet), -b0 (backup mode).
+            // Current Rust frontend does not implement these semantics yet,
+            // but must accept them so LyX invocations do not fail.
+            Short('n') => {
+                // Accept "-n 1" or "-n1" forms and ignore for now.
+                if let Some(v) = parser.optional_value() {
+                    let _ = v.string()?;
+                }
+            }
+            Short('q') => {
+                // Quiet mode is currently a no-op.
+            }
+            Short('b') => {
+                // Accept backup mode value and ignore for now.
+                if let Some(v) = parser.optional_value() {
+                    let _ = v.string()?;
+                }
+            }
             Short('l') | Long("lang") => {
                 lang = Some(parser.value()?.string()?);
             }
