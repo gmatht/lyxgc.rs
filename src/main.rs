@@ -1,16 +1,8 @@
 //! ChkTeX replacement - grammar checker for LyX/LaTeX (Rust frontend).
 
-mod engine;
-mod lang;
-mod registry;
-mod report;
-mod rules;
-mod tokenizer;
-
 use clap::Parser;
 use std::fs;
-use std::io::{self, Read, Write};
-use std::path::Path;
+use std::io::{self, Read};
 
 #[derive(Parser)]
 #[command(name = "chktex")]
@@ -33,38 +25,33 @@ struct Args {
     /// Language: LyX name or locale (e.g. en_US, fr)
     #[arg(short, long)]
     lang: Option<String>,
+
+    /// Rules only: skip ChkTeX and lacheck
+    #[arg(long)]
+    rules_only: bool,
+
+    /// Print internal timing breakdown to stderr (for benchmarking)
+    #[arg(long)]
+    bench_internal: bool,
+
+    /// Cache compiled regexes per language (faster on repeat runs in same process)
+    #[arg(long)]
+    cache_regex: bool,
+
+    /// Repeat check N times (for benchmarking cache; reports total time)
+    #[arg(long, default_value = "1")]
+    repeat: usize,
 }
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     let output_format = format!("-v{}", args.verbose);
-    let filename = args.input_file.or(args.filename).unwrap_or_else(|| "stdin".to_string());
-
-    let filetext = if filename == "stdin" {
-        let mut s = String::new();
-        io::stdin().read_to_string(&mut s)?;
-        s
-    } else {
-        let path = Path::new(&filename);
-        let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        fs::read_to_string(&abs_path).unwrap_or_default()
-    };
-
-    let filename_display = if filename == "stdin" {
-        filename.clone()
-    } else {
-        std::fs::canonicalize(&filename)
-            .map(|p| {
-                let s = p.to_string_lossy().into_owned();
-                if s.starts_with(r"\\?\") {
-                    s[4..].to_string()
-                } else {
-                    s
-                }
-            })
-            .unwrap_or(filename)
-    };
+    let filename = args
+        .input_file
+        .or(args.filename)
+        .unwrap_or_else(|| "stdin".to_string());
+    let is_stdin = filename == "stdin";
 
     let lang_spec = args
         .lang
@@ -72,40 +59,60 @@ fn main() -> std::io::Result<()> {
         .or_else(|| std::env::var("LANG").ok())
         .unwrap_or_else(|| "en".to_string());
 
-    let rule_module = registry::resolve_language(&lang_spec)
-        .or_else(|| {
-            let low = lang_spec.to_lowercase();
-            if low == "c" || low.starts_with("c.") {
-                Some("en".to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| "en".to_string());
+    let run_lacheck_chktex = !is_stdin && !args.rules_only;
 
-    let error_types = lang::load_language(&rule_module);
+    let bench_internal = args.bench_internal;
+    let cache_regex = args.cache_regex;
+    let repeat = args.repeat;
 
-    let mut out: Box<dyn Write> = if let Some(ref path) = args.output {
-        Box::new(fs::File::create(path)?)
+    let stdin_text = if is_stdin {
+        let mut s = String::new();
+        io::stdin().read_to_string(&mut s)?;
+        Some(s)
     } else {
-        Box::new(io::stdout())
+        None
     };
 
-    let n_errors = engine::find_errors(
-        &error_types,
-        out.as_mut(),
-        &filetext,
-        &filename_display,
-        &output_format,
-    )?;
-
-    out.flush()?;
+    let (mut output, mut n_errors) = (String::new(), 0usize);
+    let t_total = (bench_internal || repeat > 1).then(std::time::Instant::now);
+    for iter in 0..repeat {
+        let show_phase = bench_internal && (repeat == 1 || iter == 0);
+        let result = if let Some(ref filetext) = stdin_text {
+            lyxgc::check(
+                filetext,
+                &filename,
+                &lang_spec,
+                &output_format,
+                false, // no lacheck/chktex on stdin
+                show_phase,
+                cache_regex,
+            )?
+        } else {
+            lyxgc::check_file(
+                &filename,
+                &lang_spec,
+                &output_format,
+                run_lacheck_chktex,
+                show_phase,
+                cache_regex,
+            )?
+        };
+        output = result.0;
+        n_errors = result.1;
+    }
+    if let Some(t) = t_total {
+        eprintln!(
+            "[bench] total {} run(s): {:?} (avg {:?}/run)",
+            repeat,
+            t.elapsed(),
+            t.elapsed() / repeat.max(1) as u32
+        );
+    }
 
     if let Some(ref path) = args.output {
-        if n_errors == 0 {
-            let mut f = fs::OpenOptions::new().append(true).open(path)?;
-            writeln!(f, "X:1:1: All OK (^_^)")?;
-        }
+        fs::write(path, output)?;
+    } else {
+        print!("{}", output);
     }
 
     std::process::exit(if n_errors > 0 { 1 } else { 0 });

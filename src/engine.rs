@@ -34,39 +34,9 @@ pub struct CompiledRule {
     pub n_brackets: usize,
 }
 
-pub fn find_errors(
-    rules: &[Vec<String>],
-    out: &mut dyn Write,
-    filetext: &str,
-    filename: &str,
-    output_format: &str,
-) -> std::io::Result<usize> {
-    let mut n_errors = 0usize;
-    let mut prev_newlines = 0usize;
-
-    // Remove comments (keep %\n)
-    let comment_re = FancyRegex::new(r"(?<!\\)%.*(?:\$|\n)").unwrap_or_else(|_| FancyRegex::new("$^").unwrap());
-    let mut filetext = comment_re.replace_all(filetext, "%\n").to_string();
-    filetext = tokenize(&filetext);
-
-    // Take content after \begin{document}
-    let doc_split = Regex::new(r"\\begin\{document\}").unwrap_or_else(|_| Regex::new("$^").unwrap());
-    let parts: Vec<String> = doc_split
-        .split(&filetext)
-        .map(|s| s.to_string())
-        .collect();
-    if parts.len() > 1 {
-        prev_newlines = num_newlines(&parts[0]);
-        if parts.len() > 2 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "More than one \\begin{document} in file",
-            ));
-        }
-        filetext = parts[1].clone();
-    }
-
-    let mut compiled: Vec<CompiledRule> = vec![];
+/// Compile raw rules into CompiledRule. Expensive (~70ms for 266 rules).
+pub fn compile_rules(rules: &[Vec<String>]) -> Vec<CompiledRule> {
+    let mut compiled = vec![];
     for rule in rules {
         let (name, regex_str, special, desc) = (
             rule.get(0).cloned().unwrap_or_default(),
@@ -92,27 +62,64 @@ pub fn find_errors(
             n_brackets,
         });
     }
+    compiled
+}
+
+/// Run rules with pre-compiled patterns. Skips regex compilation (~70ms).
+pub fn find_errors_compiled(
+    compiled: &[CompiledRule],
+    out: &mut dyn Write,
+    filetext: &str,
+    filename: &str,
+    output_format: &str,
+    bench_internal: bool,
+) -> std::io::Result<usize> {
+    let mut n_errors = 0usize;
+    let mut prev_newlines = 0usize;
+
+    let t_comment = bench_internal.then(std::time::Instant::now);
+    let comment_re = FancyRegex::new(r"(?<!\\)%.*(?:\$|\n)").unwrap_or_else(|_| FancyRegex::new("$^").unwrap());
+    let mut filetext = comment_re.replace_all(filetext, "%\n").to_string();
+    filetext = tokenize(&filetext);
+    if let Some(t) = t_comment {
+        eprintln!("[bench] comment_remove + tokenize: {:?}", t.elapsed());
+    }
+
+    let doc_split = Regex::new(r"\\begin\{document\}").unwrap_or_else(|_| Regex::new("$^").unwrap());
+    let parts: Vec<String> = doc_split.split(&filetext).map(|s| s.to_string()).collect();
+    if parts.len() > 1 {
+        prev_newlines = num_newlines(&parts[0]);
+        if parts.len() > 2 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "More than one \\begin{document} in file",
+            ));
+        }
+        filetext = parts[1].clone();
+    }
+
+    run_compiled_rules(compiled, &filetext, prev_newlines, out, filename, output_format, bench_internal)
+}
+
+fn run_compiled_rules(
+    compiled: &[CompiledRule],
+    filetext: &str,
+    prev_newlines: usize,
+    out: &mut dyn Write,
+    filename: &str,
+    output_format: &str,
+    bench_internal: bool,
+) -> std::io::Result<usize> {
+    let mut n_errors = 0usize;
 
     let par_pat = Regex::new(r"(?:^|\n\s*\n|\Z)").unwrap_or_else(|_| Regex::new("$^").unwrap());
-    let pars: Vec<&str> = par_pat.split(&filetext).collect();
+    let pars: Vec<&str> = par_pat.split(filetext).collect();
     let mut old_pars: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut linenum = 1 + prev_newlines;
     for partext in &pars {
         if partext.len() > 80 && !partext.trim().is_empty() {
             if let Some(&line) = old_pars.get(*partext) {
-                report_error(
-                    out,
-                    line,
-                    1,
-                    "667",
-                    &format!("Duplicated paragraph {}", line),
-                    "",
-                    "",
-                    "",
-                    "",
-                    filename,
-                    output_format,
-                )?;
+                report_error(out, line, 1, "667", &format!("Duplicated paragraph {}", line), "", "", "", "", filename, output_format)?;
                 n_errors += 1;
             } else {
                 old_pars.insert((*partext).to_string(), linenum);
@@ -121,9 +128,9 @@ pub fn find_errors(
         linenum += num_newlines(partext) + 2;
     }
 
-    let blocktext = filetext.clone();
-
-    for rule in &compiled {
+    let blocktext = filetext.to_string();
+    let t_match = bench_internal.then(std::time::Instant::now);
+    for rule in compiled {
         let mut blocktext_ = blocktext.clone();
         if rule.special.starts_with("erase:") {
             let erase_pat = &rule.special[6..];
@@ -131,7 +138,6 @@ pub fn find_errors(
                 blocktext_ = re.replace_all(&blocktext_, "").to_string();
             }
         }
-
         let mut offset = 0;
         let mut linenum = 1 + prev_newlines;
         for cap_res in rule.pattern.captures_iter(&blocktext_) {
@@ -147,7 +153,6 @@ pub fn find_errors(
             let before_text = &blocktext_[offset..start];
             let merged = format!("{}{}", before_text, trigger_text);
             linenum = linenum + num_newlines(&merged);
-
             let trigger_user = tokens_to_user(trigger_text);
             let amount = (35 as i32 - trigger_user.len() as i32).max(0) as usize;
             let before_tail = if amount > 0 {
@@ -162,12 +167,7 @@ pub fn find_errors(
             let context_after = tokens_to_user(&after_text.chars().take(amount).collect::<String>());
             let error_context = format!("{}{}{}..", context_before, trigger_user, context_after);
             let spaces = " ".repeat(context_before.len());
-            let rule_ptrs = if trigger_user.is_empty() {
-                "^".to_string()
-            } else {
-                format!("{}{}", spaces, "^".repeat(trigger_user.len()))
-            };
-
+            let rule_ptrs = if trigger_user.is_empty() { "^".to_string() } else { format!("{}{}", spaces, "^".repeat(trigger_user.len())) };
             let mut this_desc = rule.desc.clone();
             for n in 1..=rule.n_brackets {
                 if let Some(m) = cap.get(n) {
@@ -176,25 +176,59 @@ pub fn find_errors(
                     this_desc = this_desc.replace(&format!("ARG{n}"), &format!("\"{}\"", arg));
                 }
             }
-
-            report_error(
-                out,
-                linenum,
-                1,
-                "666",
-                &rule.name,
-                &this_desc,
-                trigger_text,
-                &error_context,
-                &rule_ptrs,
-                filename,
-                output_format,
-            )?;
+            report_error(out, linenum, 1, "666", &rule.name, &this_desc, trigger_text, &error_context, &rule_ptrs, filename, output_format)?;
             n_errors += 1;
             offset = end;
         }
     }
-    prev_newlines += num_newlines(&blocktext);
-
+    if let Some(t) = t_match {
+        eprintln!("[bench] rule matching: {:?}", t.elapsed());
+    }
     Ok(n_errors)
+}
+
+pub fn find_errors(
+    rules: &[Vec<String>],
+    out: &mut dyn Write,
+    filetext: &str,
+    filename: &str,
+    output_format: &str,
+    bench_internal: bool,
+) -> std::io::Result<usize> {
+    let mut n_errors = 0usize;
+    let mut prev_newlines = 0usize;
+
+    // Remove comments (keep %\n)
+    let t_comment = bench_internal.then(std::time::Instant::now);
+    let comment_re = FancyRegex::new(r"(?<!\\)%.*(?:\$|\n)").unwrap_or_else(|_| FancyRegex::new("$^").unwrap());
+    let mut filetext = comment_re.replace_all(filetext, "%\n").to_string();
+    filetext = tokenize(&filetext);
+    if let Some(t) = t_comment {
+        eprintln!("[bench] comment_remove + tokenize: {:?}", t.elapsed());
+    }
+
+    // Take content after \begin{document}
+    let doc_split = Regex::new(r"\\begin\{document\}").unwrap_or_else(|_| Regex::new("$^").unwrap());
+    let parts: Vec<String> = doc_split
+        .split(&filetext)
+        .map(|s| s.to_string())
+        .collect();
+    if parts.len() > 1 {
+        prev_newlines = num_newlines(&parts[0]);
+        if parts.len() > 2 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "More than one \\begin{document} in file",
+            ));
+        }
+        filetext = parts[1].clone();
+    }
+
+    let t_compile = bench_internal.then(std::time::Instant::now);
+    let compiled = compile_rules(rules);
+    if let Some(t) = t_compile {
+        eprintln!("[bench] regex compile ({} rules): {:?}", compiled.len(), t.elapsed());
+    }
+
+    run_compiled_rules(&compiled, &filetext, prev_newlines, out, filename, output_format, bench_internal)
 }
