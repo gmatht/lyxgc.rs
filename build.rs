@@ -42,7 +42,7 @@ fn build_chktex(vendor: &PathBuf) {
 #define HAVE_ACCESS 1
 #define HAVE_FILENO 1
 #define HAVE_ISATTY 1
-#define HAVE_STRCASECMP 0
+/* HAVE_STRCASECMP undefined: use Utility.c strcasecmp replacement */
 #define HAVE_STRLWR 0
 #define HAVE_STRDUP 1
 #define HAVE_STDINT_H 1
@@ -66,11 +66,12 @@ fn build_chktex(vendor: &PathBuf) {
 #define HAVE_OPENDIR 1
 #define HAVE_CLOSEDIR 1
 #define HAVE_STAT 1
+#define HAVE_SYS_STAT_H 1
 #define HAVE_STRDUP 1
 #define HAVE_STRCASECMP 1
 #define HAVE_STRLWR 0
 #define HAVE_DECL_STPCPY 1
-#ifndef HAVE_STRLWR
+#if !HAVE_STRLWR
 char *strlwr(char *);
 #endif
 "#
