@@ -45,6 +45,8 @@ fn build_chktex(vendor: &PathBuf) {
 #define HAVE_STRCASECMP 0
 #define HAVE_STRLWR 0
 #define HAVE_STRDUP 1
+#define HAVE_STDINT_H 1
+#define HAVE_INTTYPES_H 1
 "#
     } else {
         r#"/* config.h for Unix (Linux/macOS) */
@@ -68,6 +70,9 @@ fn build_chktex(vendor: &PathBuf) {
 #define HAVE_STRCASECMP 1
 #define HAVE_STRLWR 0
 #define HAVE_DECL_STPCPY 1
+#ifndef HAVE_STRLWR
+char *strlwr(char *);
+#endif
 "#
     };
     std::fs::write(&config_h, config_content).expect("write config.h");
